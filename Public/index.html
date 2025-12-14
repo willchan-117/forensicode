@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ForensiCode — Verification Checker</title>
+  <style>
+    :root{
+      --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --brand:#1b84ff;
+      --ok:#1e8e3e; --bad:#d93025; --mono: "Roboto Mono", monospace;
+      --radius:12px;
+    }
+    html,body{height:100%; margin:0; font-family:"Satoshi", Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); color:#111;}
+    .wrap{max-width:1060px; margin:32px auto; padding:22px;}
+    header{display:flex; gap:18px; align-items:center; margin-bottom:18px;}
+    header img{width:64px; height:64px;}
+    h1{font-size:22px;margin:0}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+    .grid{display:flex; gap:18px; flex-wrap:wrap}
+    .col{flex:1 1 360px; min-width:320px}
+
+    .card{background:var(--card); border-radius:var(--radius); padding:18px; box-shadow:0 8px 26px rgba(12,20,30,0.06); border:1px solid #e6ecf5}
+    label{display:block;font-weight:700;margin-bottom:8px}
+    .muted{color:var(--muted); font-size:13px; margin-bottom:8px}
+
+    #drop-area{border:2px dashed #d8dde6; border-radius:10px; padding:26px; text-align:center; cursor:pointer; color:var(--muted); transition:all .14s ease}
+    #drop-area:hover { transform: translateY(-2px); }
+    #drop-area.highlight{background:linear-gradient(90deg, rgba(27,132,255,0.06), rgba(27,132,255,0.02)); border-color:var(--brand); color:var(--brand)}
+    input[type=file]{display:none}
+
+    #status-box{margin-top:12px; padding:12px; border-radius:8px; background:#fbfcfe; border:1px solid #edf2f9; min-height:96px}
+    .file-row{display:flex; align-items:center; gap:10px; justify-content:space-between; margin-bottom:10px}
+    .file-name{font-size:13px; color:#1f2937}
+    .file-badge{font-size:13px; padding:6px 10px; border-radius:8px; font-weight:700}
+    .badge-miss{background:#fff3f3; color:var(--bad); border:1px solid rgba(217,48,37,0.12)}
+    .badge-ok{background:#f3fff6; color:var(--ok); border:1px solid rgba(30,142,62,0.12)}
+    .small{font-size:12px;color:var(--muted)}
+
+    .btn{display:inline-block; background:var(--brand); color:#fff; padding:10px 14px; border-radius:10px; border:none; cursor:pointer; font-weight:800; margin-top:10px}
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+
+    #result{margin-top:16px; padding:14px; border-radius:10px; white-space:pre-wrap; font-family:inherit; font-size:14px}
+    .result-pass{background:#f3fff6; border:1px solid rgba(30,142,62,0.12); color:var(--ok)}
+    .result-fail{background:#fff4f4; border:1px solid rgba(217,48,37,0.12); color:var(--bad)}
+
+    details{margin-top:12px}
+    .meta{font-family:var(--mono); font-size:13px; color:#263238; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #eef3fb; max-height:420px; overflow:auto}
+    .truncate { max-height: 220px; overflow: hidden; position: relative; }
+    .show-more { margin-top: 8px; display:inline-block; color:var(--brand); cursor:pointer; font-weight:700; background:transparent; border:none; padding:6px 8px; border-radius:8px; }
+    .copy-btn { margin-left:8px; padding:6px 10px; border-radius:8px; border:1px solid #e6eefc; background:white; cursor:pointer; font-weight:700; }
+
+    footer{margin-top:22px; color:var(--muted); font-size:13px}
+    .hint { font-size:12px; color:var(--muted); margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="ForensiCode_logo.svg" alt="ForensiCode" onerror="this.style.display='none'">
+      <div>
+        <h1>ForensiCode — Verification Checker</h1>
+        <p class="lead">Verify a student's exported report (.json) and the original .docx file locally — no uploading, no servers.</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="col">
+        <div class="card">
+          <label>1) Upload files</label>
+          <div id="drop-area" tabindex="0" role="button" aria-label="Drop .docx and .json files here or click to choose">
+            <div style="font-weight:800; margin-bottom:8px">Drop .docx + .json here</div>
+            <div class="small">Or click to select. Please include both the exported telemetry JSON and the student's DOCX.</div>
+            <input id="file-input" type="file" multiple accept=".docx,.json" />
+          </div>
+
+          <div id="status-box">
+            <div class="file-row">
+              <div>
+                <div class="small">Document (.docx)</div>
+                <div id="docx-name" class="file-name">— no file selected —</div>
+              </div>
+              <div id="docx-badge" class="file-badge badge-miss">Missing</div>
+            </div>
+
+            <div class="file-row">
+              <div>
+                <div class="small">Report (.json)</div>
+                <div id="json-name" class="file-name">— no file selected —</div>
+              </div>
+              <div id="json-badge" class="file-badge badge-miss">Missing</div>
+            </div>
+
+            <div class="hint">Tip: The JSON must be the exported package from ForensiCode (contains <code>reportIntegrityHash</code>, <code>documentIntegrityHash</code>, and <code>telemetrySession</code>).</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <label>2) Verification options</label>
+          <div class="muted">Verification runs directly from the uploaded files (recommended).</div>
+
+          <button id="verifyBtn" class="btn" onclick="verify()">Verify report & document</button>
+
+          <div id="result" aria-live="polite">Awaiting verification…</div>
+
+          <details>
+            <summary style="cursor:pointer; font-weight:700">Advanced / raw data (expand)</summary>
+            <div style="margin-top:12px">
+              <div class="small">Report JSON preview</div>
+              <pre id="rawJson" class="meta truncate">(no report)</pre>
+              <div>
+                <button id="rawToggle" class="show-more" onclick="toggleRaw()">Show more</button>
+                <button id="copyReportHash" class="copy-btn" title="Copy reportIntegrityHash" style="display:none">Copy report hash</button>
+                <button id="copyDocHash" class="copy-btn" title="Copy documentIntegrityHash" style="display:none">Copy doc hash</button>
+              </div>
+
+              <div class="small" style="margin-top:12px">Computed hashes & debug</div>
+              <pre id="debug" class="meta">(no debug info)</pre>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <strong>Privacy:</strong> No files are uploaded — all verification runs locally in your browser. ForensiCode processes file data in-memory only.
+    </footer>
+  </div>
+
+<script>
+function $(id){return document.getElementById(id);}
+async function readFileAsArrayBuffer(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=e=>rej(e);r.readAsArrayBuffer(file);});}
+async function readFileAsText(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=e=>rej(e);r.readAsText(file);});}
+async function sha256Hex(input){let buffer;if(typeof input==="string") buffer=new TextEncoder().encode(input); else if(input instanceof ArrayBuffer) buffer=input; else if(ArrayBuffer.isView(input)) buffer=input.buffer; else throw new Error("sha256Hex: unsupported input type"); const digest=await crypto.subtle.digest("SHA-256", buffer); return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("");}
+
+let selectedFiles=[]; const dropArea=$("drop-area"); const fileInput=$("file-input"); let processing=false;
+
+fileInput.addEventListener("change", ev=>handleFiles(ev.target.files));
+dropArea.addEventListener("click", ()=> fileInput.click());
+dropArea.addEventListener("dragover", ev=>{ev.preventDefault(); dropArea.classList.add("highlight");});
+dropArea.addEventListener("dragleave", ()=> dropArea.classList.remove("highlight"));
+dropArea.addEventListener("drop", ev=>{ev.preventDefault(); dropArea.classList.remove("highlight"); handleFiles(ev.dataTransfer.files);});
+
+function handleFiles(fileList){
+  const map = new Map(selectedFiles.map(f=>[f.name,f]));
+  Array.from(fileList).forEach(f=> map.set(f.name,f));
+  selectedFiles = Array.from(map.values());
+  refreshStatus();
+}
+
+function refreshStatus(){
+  const docx = selectedFiles.find(f=> f.name.toLowerCase().endsWith(".docx"));
+  const json = selectedFiles.find(f=> f.name.toLowerCase().endsWith(".json"));
+
+  if(docx){$("docx-name").textContent=docx.name;$("docx-badge").textContent="Selected";$("docx-badge").className="file-badge badge-ok";}
+  else {$("docx-name").textContent="— no file selected —";$("docx-badge").textContent="Missing";$("docx-badge").className="file-badge badge-miss";}
+
+  if(json){$("json-name").textContent=json.name;$("json-badge").textContent="Selected";$("json-badge").className="file-badge badge-ok";}
+  else {$("json-name").textContent="— no file selected —";$("json-badge").textContent="Missing";$("json-badge").className="file-badge badge-miss";}
+}
+
+let rawExpanded=false; function toggleRaw(){const raw=$("rawJson"); rawExpanded=!rawExpanded; if(rawExpanded){raw.classList.remove("truncate"); $("rawToggle").textContent="Show less";} else {raw.classList.add("truncate"); $("rawToggle").textContent="Show more";}}
+
+function collectFlags(pkg){const flags={largePaste:0,speedSpike:0,sustainedSpeed:0};const arr=pkg.telemetrySession?.sessions??pkg.sessions??[]; if(!Array.isArray(arr)) return flags; for(const s of arr){if(!s.flags) continue; if(s.flags.largePaste===true) flags.largePaste++; if(s.flags.speedSpike===true) flags.speedSpike++; if(s.flags.sustainedSpeed===true) flags.sustainedSpeed++;} return flags;}
+
+async function verify(){
+  if(processing) return; processing=true;
+  try{
+    const resultEl=$("result"); const rawJsonEl=$("rawJson"); const debugEl=$("debug"); const copyReportHashBtn=$("copyReportHash"); const copyDocHashBtn=$("copyDocHash");
+    resultEl.className=""; resultEl.textContent="Processing… computing hashes locally…"; rawJsonEl.textContent="(no report)"; debugEl.textContent="(no debug info)"; copyReportHashBtn.style.display="none"; copyDocHashBtn.style.display="none";
+
+    const docxFile=selectedFiles.find(f=> f.name.toLowerCase().endsWith(".docx"));
+    const jsonFile=selectedFiles.find(f=> f.name.toLowerCase().endsWith(".json"));
+    if(!docxFile||!jsonFile){resultEl.className="result-fail"; resultEl.textContent="❌ Please select both a .docx and the exported .json report."; return;}
+
+    const docBuffer=await readFileAsArrayBuffer(docxFile);
+    const computedDocHash=await sha256Hex(docBuffer);
+
+    const jsonText=await readFileAsText(jsonFile);
+    let packageObj;
+    try{packageObj=JSON.parse(jsonText);} catch(e){throw new Error("Invalid JSON file (unable to parse).");}
+
+    const previewObj=packageObj.telemetrySession??packageObj;
+    const pretty=JSON.stringify(previewObj,null,2);
+    rawJsonEl.textContent=pretty.length>2000?pretty.slice(0,2000)+"\n\n[... truncated ...]":pretty;
+    if(packageObj.reportIntegrityHash) copyReportHashBtn.style.display="inline-block";
+    if(packageObj.documentIntegrityHash) copyDocHashBtn.style.display="inline-block";
+
+    const toHash=JSON.stringify(packageObj.telemetrySession??packageObj);
+    const recomputedReportHash=await sha256Hex(toHash);
+
+    if(packageObj.reportIntegrityHash){
+      if(recomputedReportHash!==packageObj.reportIntegrityHash){
+        resultEl.className="result-fail"; resultEl.textContent="❌ Report integrity failed — JSON appears to have been modified after export."; debugEl.textContent=`Recomputed: ${recomputedReportHash}\nEmbedded: ${packageObj.reportIntegrityHash}`; return;
+      }
+    } else {debugEl.textContent="⚠️ Warning: No 'reportIntegrityHash' field present in JSON.\n";}
+
+    if(packageObj.documentIntegrityHash){
+      if(packageObj.documentIntegrityHash!==computedDocHash){
+        resultEl.className="result-fail"; resultEl.textContent="❌ Document mismatch — uploaded DOCX does not match exported report."; debugEl.textContent=`Computed DOCX: ${computedDocHash}\nExpected: ${packageObj.documentIntegrityHash}`; return;
+      }
+    } else {debugEl.textContent+="\n⚠️ Warning: No 'documentIntegrityHash' in JSON — unable to verify DOCX integrity.\n";}
+
+    const aggregatedFlags=collectFlags(packageObj);
+    let flagSummary;
+    if(aggregatedFlags.largePaste===0&&aggregatedFlags.speedSpike===0&&aggregatedFlags.sustainedSpeed===0) flagSummary="No suspicious activity flags detected.";
+    else flagSummary=`• Large Paste Events: ${aggregatedFlags.largePaste}\n• Speed Spike Events: ${aggregatedFlags.speedSpike}\n• Sustained High-Speed Typing Events: ${aggregatedFlags.sustainedSpeed}`;
+
+    resultEl.className="result-pass";
+    resultEl.textContent="✅ VERIFICATION PASSED — Document and report match.\n\nSuspicious Activity Flags:\n"+flagSummary;
+
+    debugEl.textContent+=`\nComputedReportHash: ${recomputedReportHash}\nComputedDocHash: ${computedDocHash}\nExportedAt: ${packageObj.exportedAt??packageObj.timestamp??"N/A"}`;
+
+  }catch(err){
+    const resultEl=$("result"); const debugEl=$("debug");
+    resultEl.className="result-fail"; resultEl.textContent=`❌ Verification error: ${err.message}`; debugEl.textContent=err.stack||String(err);
+  } finally{processing=false;}
+}
+
+$("copyReportHash").addEventListener("click", async ()=>{
+  try{const jsonFile=selectedFiles.find(f=> f.name.toLowerCase().endsWith(".json")); if(!jsonFile) return alert("No report file selected"); const text=await readFileAsText(jsonFile); const pkg=JSON.parse(text); if(!pkg.reportIntegrityHash) return alert("No reportIntegrityHash found"); await navigator.clipboard.writeText(pkg.reportIntegrityHash); $("copyReportHash").textContent="Copied!"; setTimeout(()=> $("copyReportHash").textContent="Copy report hash",1500);}catch(e){alert("Copy failed");}
+});
+$("copyDocHash").addEventListener("click", async ()=>{
+  try{const jsonFile=selectedFiles.find(f=> f.name.toLowerCase().endsWith(".json")); if(!jsonFile) return alert("No report file selected"); const text=await readFileAsText(jsonFile); const pkg=JSON.parse(text); if(!pkg.documentIntegrityHash) return alert("No documentIntegrityHash found"); await navigator.clipboard.writeText(pkg.documentIntegrityHash); $("copyDocHash").textContent="Copied!"; setTimeout(()=> $("copyDocHash").textContent="Copy doc hash",1500);}catch(e){alert("Copy failed");}
+});
+
+refreshStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="TaskPaneApp">
+
+  <Id>617dd45b-8656-4fe0-ab83-bed9db8c497a</Id>
+  <Version>1.0.0.9</Version>
+  <ProviderName>ForensiCode</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="ForensiCode"/>
+  <Description DefaultValue="Human authorship verification."/>
+
+  <IconUrl DefaultValue="https://forensicode.web.app/assets/favicon-32x32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://forensicode.web.app/assets/favicon-80x80.png"/>
+
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://forensicode.web.app/word-addin/taskpane.html"/>
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>
