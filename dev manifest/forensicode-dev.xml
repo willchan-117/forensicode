@@ -6,12 +6,13 @@
   xsi:type="TaskPaneApp">
 
   <Id>617dd45b-8656-4fe0-ab83-bed9db8c497a</Id>
-  <Version>1.0.3.0</Version>
+  <Version>1.0.4.0</Version>
   <ProviderName>ForensiCode</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
   <DisplayName DefaultValue="ForensiCode"/>
   <Description DefaultValue="Human authorship verification."/>
+
   <IconUrl DefaultValue="https://forensicode.web.app/assets/favicon-32x32.png"/>
 
   <Hosts>
@@ -24,7 +25,6 @@
 
   <Permissions>ReadWriteDocument</Permissions>
 
-  <!-- RIBBON -->
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
@@ -38,7 +38,7 @@
               <Group id="ForensiCode.Group">
                 <Label resid="Group.Label"/>
 
-                <Control xsi:type="Button" id="ForensiCode.ShowTaskpane">
+                <Control xsi:type="Button" id="ForensiCode.Button">
                   <Label resid="Button.Label"/>
                   <Supertip>
                     <Title resid="Button.Label"/>
@@ -48,15 +48,13 @@
                   <Icon>
                     <bt:Image size="16" resid="Icon.16"/>
                     <bt:Image size="32" resid="Icon.32"/>
-                    <bt:Image size="80" resid="Icon.80"/>
                   </Icon>
 
                   <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>ForensiCode.Taskpane</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
-
                 </Control>
+
               </Group>
             </OfficeTab>
           </ExtensionPoint>
@@ -69,7 +67,6 @@
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://forensicode.web.app/assets/favicon-32x32.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://forensicode.web.app/assets/favicon-32x32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://forensicode.web.app/assets/favicon-32x32.png"/>
       </bt:Images>
 
       <bt:Urls>
@@ -82,7 +79,7 @@
       </bt:ShortStrings>
 
       <bt:LongStrings>
-        <bt:String id="Button.Tooltip" DefaultValue="Open the ForensiCode verification panel"/>
+        <bt:String id="Button.Tooltip" DefaultValue="Open the ForensiCode panel"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
