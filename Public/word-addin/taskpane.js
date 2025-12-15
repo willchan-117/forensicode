@@ -434,13 +434,11 @@ async function sha256(data) {
 function generateToken() {
   return "HV-" + [...crypto.getRandomValues(new Uint8Array(4))].map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
-async function buildVerificationPackage(exportPayload, docHash) {
-  // clone payload so hashing is stable
-  const payloadForHash = { ...exportPayload };
-
-  // compute report hash FIRST (no self-reference)
+async function buildVerificationPackage(telemetrySession, docHash) {
+  // IMPORTANT:
+  // Hash EXACTLY what the verifier hashes: telemetrySession only
   const reportIntegrityHash = await sha256(
-    JSON.stringify(payloadForHash)
+    JSON.stringify(telemetrySession)
   );
 
   const token = generateToken();
@@ -448,11 +446,12 @@ async function buildVerificationPackage(exportPayload, docHash) {
   return {
     reportIntegrityHash,
     documentIntegrityHash: docHash || null,
-    exportedAt: exportPayload.exportedAt,
+    exportedAt: telemetrySession.exportedAt,
     verificationToken: token,
-    report: exportPayload
+    telemetrySession
   };
 }
+
 
 
 function updateVerificationTokenUI() {
@@ -478,118 +477,85 @@ function updateDocumentHashUI(hash) {
 }
 
 /* ============ EXPORT LOGIC (ANCHOR-FIRST) ============ */
-async function exportJson(payload, filename) {
+async function exportJson(_, filename) {
   if (exportJsonRunning) {
     await logDiagnostic("exportJson blocked (already running)");
-    return { success: false, method: "double_block" };
+    return { success: false };
   }
   exportJsonRunning = true;
+
   try {
     const totalActiveMs = sessions.reduce((sum, s) => {
       const start = new Date(s.startTime).getTime();
       const end = new Date(s.endTime || Date.now()).getTime();
       return sum + (end - start);
     }, 0);
-    const totalCharacters = sessions.reduce((sum, s) => sum + (s.charactersTyped || 0), 0);
+
+    const totalCharacters = sessions.reduce(
+      (sum, s) => sum + (s.charactersTyped || 0),
+      0
+    );
+
     const totalMinutes = Math.floor(totalActiveMs / 60000);
     const totalSeconds = Math.floor((totalActiveMs % 60000) / 1000);
 
     const docHash = await getDocumentHash();
+    updateDocumentHashUI(docHash);
 
-    const summary = {
-      totalSessions: sessions.length,
-      totalActiveTime: `${totalMinutes} min ${totalSeconds} sec`,
-      totalCharactersTyped: totalCharacters,
-      documentIntegrityHash: docHash || "N/A - Failed to compute",
-    };
-
-    const detailedSessions = sessions.map((s, i) => {
-      const start = new Date(s.startTime);
-      const end = new Date(s.endTime || Date.now());
-      const activeMs = end - start;
-      const activeMin = Math.floor(activeMs / 60000);
-      const activeSec = Math.floor((activeMs % 60000) / 1000);
-      const cpm = activeMs > 0 ? Math.round((s.charactersTyped || 0) / (activeMs / 60000)) : 0;
-      return {
+    const telemetrySession = {
+      summary: {
+        totalSessions: sessions.length,
+        totalActiveTime: `${totalMinutes} min ${totalSeconds} sec`,
+        totalCharactersTyped: totalCharacters
+      },
+      sessions: sessions.map((s, i) => ({
         sessionNumber: i + 1,
-        startTimeISO: start.toISOString(),
-        endTimeISO: end.toISOString(),
-        startTimeFormatted: formatTimestamp(start),
-        endTimeFormatted: formatTimestamp(end),
-        activeWritingTime: `${activeMin} min ${activeSec} sec`,
+        startTime: s.startTime,
+        endTime: s.endTime,
         charactersTyped: s.charactersTyped || 0,
-        charactersPerMinute: cpm,
         flags: s.flags || {},
-        edits: s.edits || []
-      };
-    });
-
-    const exportPayload = {
-      summary,
-      sessions: detailedSessions,
+        edits: s.edits || [],
+        events: s.events || []
+      })),
       exportedAt: new Date().toISOString(),
-      exportedAtFormatted: formatTimestamp(new Date()),
       exporterVersion: APP_VERSION
     };
 
-    const verificationPackage = await buildVerificationPackage(exportPayload, docHash);
+    const verificationPackage = await buildVerificationPackage(
+      telemetrySession,
+      docHash
+    );
 
-    verificationToken = verificationPackage.token;
+    verificationToken = verificationPackage.verificationToken;
     await saveVerificationToken(verificationToken);
     updateVerificationTokenUI();
 
     const json = JSON.stringify(verificationPackage, null, 2);
 
-    // PRIMARY: Anchor download (user device).
-    try {
-      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.style.display = "none";
-      document.body.appendChild(a);
+    // ---- DOWNLOAD ----
+    const blob = new Blob([json], {
+      type: "application/json;charset=utf-8"
+    });
+    const url = URL.createObjectURL(blob);
 
-      const evt = document.createEvent("MouseEvents");
-      evt.initEvent("click", true, true);
-      a.dispatchEvent(evt);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 
-      a.remove();
-      URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
 
-      await notify("Export downloaded to your device.", "success");
-      return { success: true, method: "anchor_download" };
-    } catch (err) {
-      await logDiagnostic("Anchor download failed", err);
-    }
-
-    // FALLBACK 1: OfficeRuntime storage
-    try {
-      if (OfficeRuntime?.storage) {
-        await OfficeRuntime.storage.setItem("ProofWrite_export_" + filename, json);
-        await notify("Export saved to Office runtime storage (fallback).", "warn");
-        return { success: true, method: "runtime_storage" };
-      }
-    } catch (err) { await logDiagnostic("Export runtime_storage failed", err); }
-
-    // FALLBACK 2: Render JSON into the UI panel
-    try {
-      if (lastReportEl) {
-        lastReportEl.textContent = json;
-        await notify("Export JSON displayed in the panel (fallback).", "warn");
-        return { success: true, method: "ui_copy" };
-      }
-    } catch (err) { await logDiagnostic("Final export fallback failed", err); }
-
-    await notify("Export failed completely.", "error");
-    return { success: false, method: "none" };
+    await notify("Export successful — verification-ready JSON.", "success");
+    return { success: true };
 
   } catch (err) {
     await logDiagnostic("exportJson failed", err);
-    await notify("Export failed. Check diagnostics.", "error");
-    return { success: false, method: "error" };
+    await notify("Export failed.", "error");
+    return { success: false };
   } finally {
-    setTimeout(() => { exportJsonRunning = false; }, 350);
+    setTimeout(() => { exportJsonRunning = false; }, 300);
   }
 }
 
