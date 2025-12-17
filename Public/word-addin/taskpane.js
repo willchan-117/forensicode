@@ -132,6 +132,75 @@ function safeRenderSessionGraphs(session) {
   return false;
 }
 
+/* ============ CANONICAL TEXT EXTRACTION (v1) ============ */
+async function getCanonicalDocumentText() {
+  try {
+    return await safeWordRun(async (ctx) => {
+      const body = ctx.document.body;
+
+      // Load paragraphs
+      const paragraphs = body.paragraphs;
+      paragraphs.load("items/text");
+
+      // Load tables
+      const tables = body.tables;
+      tables.load("items/rows/items/cells/items/body/text");
+
+      await ctx.sync();
+
+      const blocks = [];
+
+      // Paragraphs
+      paragraphs.items.forEach(p => {
+        const t = (p.text || "").trim();
+        if (t) blocks.push(t);
+      });
+
+      // Tables (row-major, cell text)
+      tables.items.forEach(table => {
+        table.rows.items.forEach(row => {
+          row.cells.items.forEach(cell => {
+            const t = (cell.body.text || "").trim();
+            if (t) blocks.push(t);
+          });
+        });
+      });
+
+      let canonical = blocks.join("\n");
+
+      // --- Normalization ---
+      canonical = canonical
+        .normalize("NFKC")
+        .replace(/\r\n?/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim() + "\n";
+
+      return canonical;
+    });
+  } catch (err) {
+    await logDiagnostic("getCanonicalDocumentText failed", err);
+    return null;
+  }
+}
+
+
+
+async function debugCanonicalText() {
+  const text = await getCanonicalDocumentText();
+  console.log("CANONICAL TEXT ↓↓↓");
+  console.log(text);
+  alert(
+    text
+      ? "Canonical text extracted. Check console."
+      : "Canonical text FAILED."
+  );
+}
+
+
+
+
+
 /* ============ Initialization ============ */
 Office.onReady(async () => {
   console.log("Office.js is ready");
