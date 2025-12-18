@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ForensiCode, The Human Verification Checker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <title>ForensiCode, The Human Verification Checker (v1.1 Test)</title>
  <style>
 :root{
   --bg:#f4f6f8;
@@ -461,6 +463,29 @@ function collectFlags(pkg){
   return flags;
 }
 
+
+// =====================
+// DOCX canonical text extraction
+// =====================
+async function extractCanonicalTextFromDocx(arrayBuffer){
+  // DOCX is a ZIP → extract word/document.xml
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const docXml = await zip.file("word/document.xml").async("string");
+
+  // Remove XML tags, preserve paragraph breaks
+  const text = docXml
+    .replace(/<w:p[\s\S]*?<\/w:p>/g, m =>
+      m.replace(/<[^>]+>/g, "").trim() + "\n"
+    )
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  return text;
+}
+
+
+
 // =====================
 // Verify
 // =====================
@@ -486,7 +511,9 @@ async function verify(){
     }
 
     const docBuffer=await readFileAsArrayBuffer(docxFile);
-    const computedDocHash=await sha256Hex(docBuffer);
+    const canonicalText = await extractCanonicalTextFromDocx(docBuffer);
+const computedDocHash = await sha256Hex(canonicalText);
+
 
     const jsonText=await readFileAsText(jsonFile);
     const pkg=JSON.parse(jsonText);
@@ -567,6 +594,11 @@ async function verify(){
   } finally {
     processing=false;
   }
+
+  debugEl.textContent +=
+  `\nCanonicalTextHash: ${computedDocHash}\n` +
+  `CanonicalTextLength: ${canonicalText.length}`;
+
 }
 
 refreshStatus();

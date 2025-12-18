@@ -43,6 +43,15 @@ let recentWordCounts = [];
 
 let sessionTimeEl, wordCountEl, charCountEl, lastReportEl, autoBannerEl, flaggedSummaryEl, exportBtnEl;
 
+let documentBinding = null;
+/*
+documentBinding = {
+  canonicalTextHash,
+  binaryHash,
+  createdAt
+}
+*/
+
 /* ============ HELPERS: Notifications + Timestamp formatting ============ */
 function notify(message, level = "info", duration = 3000) {
   try {
@@ -99,6 +108,55 @@ function formatTimestamp(input) {
     return String(input);
   }
 }
+
+async function computeDocumentBinding() {
+  const canonicalText = await getCanonicalDocumentText();
+  const canonicalTextHash = await sha256(canonicalText);
+
+  const binaryHash = await getDocumentHash(); // already implemented
+
+  return {
+    canonicalTextHash,
+    binaryHash,
+    createdAt: new Date().toISOString()
+  };
+}
+
+
+async function initDocumentBinding() {
+  const stored = await OfficeRuntime.storage.getItem("ForensiCode_documentBinding");
+  const current = await computeDocumentBinding();
+
+  if (!stored) {
+    documentBinding = current;
+    sessions = [];
+    await OfficeRuntime.storage.setItem(
+      "ForensiCode_documentBinding",
+      JSON.stringify(documentBinding)
+    );
+    await storeSessionsLocally();
+    return;
+  }
+
+  const previous = JSON.parse(stored);
+
+  const same =
+    previous.canonicalTextHash === current.canonicalTextHash &&
+    previous.binaryHash === current.binaryHash;
+
+  if (!same) {
+    documentBinding = current;
+    sessions = [];
+    await OfficeRuntime.storage.setItem(
+      "ForensiCode_documentBinding",
+      JSON.stringify(documentBinding)
+    );
+    await storeSessionsLocally();
+  } else {
+    documentBinding = previous;
+  }
+}
+
 
 /* ============ Graph helpers (calls into graphs.js if present) ============ */
 function safeInitGraphs() {
@@ -258,7 +316,9 @@ Office.onReady(async () => {
       try { initUI(); } catch (e) { console.warn("initUI failed", e); }
     }
 
-    await loadSessionsFromStorage();
+    await initDocumentBinding();
+await loadSessionsFromStorage();
+
     updateFlaggedSummary();
 
     try {
@@ -516,9 +576,10 @@ async function buildVerificationPackage(telemetrySession, docHash) {
     token,
     hash: reportIntegrityHash,
     session: {
-      ...telemetrySession,
-      documentIntegrityHash: docHash || null
-    }
+  ...telemetrySession,
+  documentIntegrityHash: documentBinding?.canonicalTextHash || null,
+  documentBinaryHash: documentBinding?.binaryHash || null
+}
   };
 }
 
@@ -569,14 +630,18 @@ async function exportJson(_, filename) {
     const totalSeconds = Math.floor((totalActiveMs % 60000) / 1000);
 
     const docHash = await getDocumentHash();
+    const binding = documentBinding;
     updateDocumentHashUI(docHash);
 
     const telemetrySession = {
       summary: {
-        totalSessions: sessions.length,
-        totalActiveTime: `${totalMinutes} min ${totalSeconds} sec`,
-        totalCharactersTyped: totalCharacters
-      },
+  totalSessions: sessions.length,
+  totalActiveTime: `${totalMinutes} min ${totalSeconds} sec`,
+  totalCharactersTyped: totalCharacters,
+  documentIntegrityHash: binding?.canonicalTextHash || null,
+  documentBinaryHash: binding?.binaryHash || null
+}
+,
       sessions: sessions.map((s, i) => ({
         sessionNumber: i + 1,
         startTime: s.startTime,
@@ -872,15 +937,17 @@ async function startSession(auto = false, forcedInitialCount = null) {
     recentWordCounts = [{ timestamp: sessionStartTime, count: wc }];
 
     currentSession = {
-      startTime: new Date(sessionStartTime).toISOString(),
-      startTimestamp: sessionStartTime,
-      initialWordCount: wc,
-      edits: [],
-      flags: { largePaste: false, speedSpike: false, sustainedSpeed: false },
-      humanScore: 100,
-      charactersTyped: 0,
-      events: [{ t: sessionStartTime, c: 0 }] // start event
-    };
+  startTime: new Date(sessionStartTime).toISOString(),
+  startTimestamp: sessionStartTime,
+  initialWordCount: wc,
+  edits: [],
+  flags: { largePaste: false, speedSpike: false, sustainedSpeed: false },
+  humanScore: 100,
+  charactersTyped: 0,
+  events: [{ t: sessionStartTime, c: 0 }],
+  documentBinding: documentBinding
+};
+
 
     if (auto) showAutoStartBanner();
     updateUiCounts(0, 0);
